@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run build
+
+      - name: Commit dist/ if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git diff --name-only dist/)" ]; then
+            git add dist/
+            git commit -m "Build dist/"
+            git push origin HEAD:main
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" --generate-notes
+
+      - name: Update major version tag
+        run: |
+          MAJOR=$(echo "${{ github.ref_name }}" | grep -oP '^v\d+')
+          git tag -f "$MAJOR" "${{ github.ref_name }}"
+          git push origin "$MAJOR" --force

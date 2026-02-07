@@ -1,0 +1,53 @@
+name: 'Vulnerability Spoiler Alert'
+description: 'Monitor repositories for security vulnerability patches using Claude AI'
+author: 'spaceraccoon'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  anthropic-api-key:
+    description: 'Anthropic API key for Claude'
+    required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+    default: ${{ github.token }}
+  repositories:
+    description: 'JSON array of repositories to monitor (e.g., [{"owner":"expressjs","repo":"express"}])'
+    required: true
+  state-file:
+    description: 'Path to state file for tracking last checked commits'
+    required: false
+    default: '.vulnerability-spoiler-state.json'
+  create-issues:
+    description: 'Whether to create GitHub issues for detected vulnerabilities'
+    required: false
+    default: 'true'
+  issue-repo:
+    description: 'Repository to create issues in (defaults to current repository)'
+    required: false
+    default: ''
+  model:
+    description: 'Claude model to use for analysis'
+    required: false
+    default: 'claude-sonnet-4-20250514'
+  max-commits:
+    description: 'Maximum number of commits to analyze per repository per run'
+    required: false
+    default: '50'
+
+outputs:
+  vulnerabilities-found:
+    description: 'Number of vulnerabilities detected'
+  issues-created:
+    description: 'Number of issues created'
+  analyzed-commits:
+    description: 'Total number of commits analyzed'
+  results:
+    description: 'JSON array of detected vulnerabilities with details'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
