@@ -117,15 +117,25 @@ export async function createVulnerabilityIssue(
   commit: CommitInfo,
   analysis: VulnerabilityAnalysis
 ): Promise<string> {
-  const severityLabel = analysis.severity?.toLowerCase() || "unknown";
+  const allowedSeverities = ["critical", "high", "medium", "low"];
+  const rawSeverity = analysis.severity?.toLowerCase() || "unknown";
+  const severityLabel = allowedSeverities.includes(rawSeverity) ? rawSeverity : "unknown";
   const repoFullName = `${repo.owner}/${repo.repo}`;
+
+  const safeAuthor = escapeMarkdown(commit.author);
+  const safeMessage = escapeCodeFence(commit.message);
+  const safeVulnType = escapeMarkdown(analysis.vulnerabilityType || "Unknown");
+  const safeSeverity = escapeMarkdown(analysis.severity || "Unknown");
+  const safeDescription = escapeMarkdown(analysis.description || "No description available.");
+  const safeAffectedCode = analysis.affectedCode ? escapeCodeFence(analysis.affectedCode) : null;
+  const safePoC = analysis.proofOfConcept ? escapeCodeFence(analysis.proofOfConcept) : null;
 
   const prSection = commit.pullRequest
     ? `
 ### Pull Request
-**PR:** [#${commit.pullRequest.number} - ${commit.pullRequest.title}](${commit.pullRequest.url})
-**Labels:** ${commit.pullRequest.labels.length > 0 ? commit.pullRequest.labels.join(", ") : "None"}
-${commit.pullRequest.body ? `\n**Description:**\n${commit.pullRequest.body.substring(0, 500)}${commit.pullRequest.body.length > 500 ? "..." : ""}` : ""}
+**PR:** [#${commit.pullRequest.number} - ${escapeMarkdown(commit.pullRequest.title)}](${commit.pullRequest.url})
+**Labels:** ${commit.pullRequest.labels.length > 0 ? commit.pullRequest.labels.map(l => escapeMarkdown(l)).join(", ") : "None"}
+${commit.pullRequest.body ? `\n**Description:**\n${escapeMarkdown(commit.pullRequest.body.substring(0, 500))}${commit.pullRequest.body.length > 500 ? "..." : ""}` : ""}
 `
     : "";
 
@@ -133,27 +143,27 @@ ${commit.pullRequest.body ? `\n**Description:**\n${commit.pullRequest.body.subst
 
 **Repository:** [${repoFullName}](https://github.com/${repoFullName})
 **Commit:** [${commit.sha.substring(0, 7)}](${commit.url})
-**Author:** ${commit.author}
+**Author:** ${safeAuthor}
 **Date:** ${commit.date}
 
 ### Commit Message
 \`\`\`
-${commit.message}
+${safeMessage}
 \`\`\`
 ${prSection}
 ### Analysis
 
-**Vulnerability Type:** ${analysis.vulnerabilityType || "Unknown"}
-**Severity:** ${analysis.severity || "Unknown"}
+**Vulnerability Type:** ${safeVulnType}
+**Severity:** ${safeSeverity}
 
 ### Description
-${analysis.description || "No description available."}
+${safeDescription}
 
 ### Affected Code
-${analysis.affectedCode ? `\`\`\`\n${analysis.affectedCode}\n\`\`\`` : "Not specified"}
+${safeAffectedCode ? `\`\`\`\n${safeAffectedCode}\n\`\`\`` : "Not specified"}
 
 ### Proof of Concept
-${analysis.proofOfConcept ? `\`\`\`\n${analysis.proofOfConcept}\n\`\`\`` : "Not specified"}
+${safePoC ? `\`\`\`\n${safePoC}\n\`\`\`` : "Not specified"}
 
 ---
 *This issue was automatically created by [Vulnerability Spoiler Alert](https://github.com/spaceraccoon/vulnerability-spoiler-alert-action).*
@@ -164,7 +174,7 @@ ${analysis.proofOfConcept ? `\`\`\`\n${analysis.proofOfConcept}\n\`\`\`` : "Not 
     const { data: issue } = await octokit.issues.create({
       owner: issueRepo.owner,
       repo: issueRepo.repo,
-      title: `[Vulnerability] ${repoFullName}: ${analysis.vulnerabilityType || "Security Patch Detected"}`,
+      title: `[Vulnerability] ${repoFullName}: ${safeVulnType}`,
       body,
       labels: ["vulnerability", `severity:${severityLabel}`],
     });
@@ -179,4 +189,17 @@ ${analysis.proofOfConcept ? `\`\`\`\n${analysis.proofOfConcept}\n\`\`\`` : "Not 
 export function truncateDiff(diff: string, maxLength: number): string {
   if (diff.length <= maxLength) return diff;
   return diff.substring(0, maxLength) + "\n\n... [diff truncated]";
+}
+
+function escapeCodeFence(text: string): string {
+  return text.replace(/`{3,}/g, (match) => "`\u200B".repeat(match.length));
+}
+
+function escapeMarkdown(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }

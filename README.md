@@ -211,11 +211,52 @@ permissions:
 3. Create a workflow file as shown in the examples above
 4. Enable the workflow
 
+## Security Considerations
+
+### Prompt Injection Risk
+
+This action sends commit diffs, commit messages, and pull request metadata from
+monitored repositories to an LLM for analysis. Because these inputs are
+controlled by the authors of the monitored repositories, they are inherently
+attacker-controllable. A malicious actor can craft commit messages, PR
+descriptions, or code diffs that contain adversarial instructions designed to
+manipulate the LLM's output. This is known as **prompt injection** and it
+**cannot be fully prevented** by the action itself.
+
+Prompt injection could be used to:
+
+- **Suppress real detections** — instructing the model to always return
+  `isVulnerabilityPatch: false`, causing the action to silently miss actual
+  vulnerability patches.
+- **Generate false positives** — forcing the model to flag benign commits as
+  vulnerabilities with fabricated descriptions and proof-of-concept exploits.
+- **Influence issue content** — since the model's output is used to create
+  GitHub issues, a manipulated response could include misleading or
+  socially-engineered content in your issue tracker.
+
+### Recommended Mitigations
+
+1. **Treat all results as advisory.** Never take automated action (e.g.,
+   blocking deployments, sending public notifications) based solely on this
+   action's output without human review.
+2. **Restrict the issue repository.** Use a private or internal repository for
+   created issues (`issue-repo` input) so that injected content is not publicly
+   visible.
+3. **Use `create-issues: false` for untrusted sources.** When monitoring
+   repositories you do not control, disable automatic issue creation and review
+   the `results` output programmatically or manually instead.
+4. **Apply least-privilege tokens.** Use a GitHub token scoped to only the
+   permissions the action needs. Do not use tokens with broad org-level access.
+5. **Review issues before acting.** Any vulnerability details, proof-of-concept
+   exploits, or severity ratings in created issues originate from LLM analysis
+   of external data and should be independently verified.
+
 ## Limitations
 
 - Only analyzes public repositories (or private repos your token can access)
 - Large diffs are truncated to fit API limits
-- AI analysis may have false positives/negatives
+- AI analysis may have false positives/negatives — all results should be treated
+  as advisory and verified by a human (see [Security Considerations](#security-considerations))
 - Rate limited by GitHub and Anthropic APIs
 
 ## Contributing

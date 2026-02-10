@@ -39,10 +39,13 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "${{ github.ref_name }}" --generate-notes
+          TAG_NAME: ${{ github.ref_name }}
+        run: gh release create "$TAG_NAME" --generate-notes
 
       - name: Update major version tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          MAJOR=$(echo "${{ github.ref_name }}" | grep -oP '^v\d+')
-          git tag -f "$MAJOR" "${{ github.ref_name }}"
+          MAJOR=$(echo "$TAG_NAME" | grep -oP '^v\d+')
+          git tag -f "$MAJOR" "$TAG_NAME"
           git push origin "$MAJOR" --force

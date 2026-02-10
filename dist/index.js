@@ -37967,6 +37967,8 @@ var core = __nccwpck_require__(7484);
 var github = __nccwpck_require__(3228);
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __nccwpck_require__(9896);
+// EXTERNAL MODULE: external "path"
+var external_path_ = __nccwpck_require__(6928);
 ;// CONCATENATED MODULE: ./node_modules/@octokit/rest/node_modules/universal-user-agent/index.js
 function getUserAgent() {
   if (typeof navigator === "object" && "userAgent" in navigator) {
@@ -42035,41 +42037,50 @@ async function getLatestCommitSha(repo) {
     return commits[0].sha;
 }
 async function createVulnerabilityIssue(issueRepo, repo, commit, analysis) {
-    const severityLabel = analysis.severity?.toLowerCase() || "unknown";
+    const allowedSeverities = ["critical", "high", "medium", "low"];
+    const rawSeverity = analysis.severity?.toLowerCase() || "unknown";
+    const severityLabel = allowedSeverities.includes(rawSeverity) ? rawSeverity : "unknown";
     const repoFullName = `${repo.owner}/${repo.repo}`;
+    const safeAuthor = escapeMarkdown(commit.author);
+    const safeMessage = escapeCodeFence(commit.message);
+    const safeVulnType = escapeMarkdown(analysis.vulnerabilityType || "Unknown");
+    const safeSeverity = escapeMarkdown(analysis.severity || "Unknown");
+    const safeDescription = escapeMarkdown(analysis.description || "No description available.");
+    const safeAffectedCode = analysis.affectedCode ? escapeCodeFence(analysis.affectedCode) : null;
+    const safePoC = analysis.proofOfConcept ? escapeCodeFence(analysis.proofOfConcept) : null;
     const prSection = commit.pullRequest
         ? `
 ### Pull Request
-**PR:** [#${commit.pullRequest.number} - ${commit.pullRequest.title}](${commit.pullRequest.url})
-**Labels:** ${commit.pullRequest.labels.length > 0 ? commit.pullRequest.labels.join(", ") : "None"}
-${commit.pullRequest.body ? `\n**Description:**\n${commit.pullRequest.body.substring(0, 500)}${commit.pullRequest.body.length > 500 ? "..." : ""}` : ""}
+**PR:** [#${commit.pullRequest.number} - ${escapeMarkdown(commit.pullRequest.title)}](${commit.pullRequest.url})
+**Labels:** ${commit.pullRequest.labels.length > 0 ? commit.pullRequest.labels.map(l => escapeMarkdown(l)).join(", ") : "None"}
+${commit.pullRequest.body ? `\n**Description:**\n${escapeMarkdown(commit.pullRequest.body.substring(0, 500))}${commit.pullRequest.body.length > 500 ? "..." : ""}` : ""}
 `
         : "";
     const body = `## Potential Security Vulnerability Detected
 
 **Repository:** [${repoFullName}](https://github.com/${repoFullName})
 **Commit:** [${commit.sha.substring(0, 7)}](${commit.url})
-**Author:** ${commit.author}
+**Author:** ${safeAuthor}
 **Date:** ${commit.date}
 
 ### Commit Message
 \`\`\`
-${commit.message}
+${safeMessage}
 \`\`\`
 ${prSection}
 ### Analysis
 
-**Vulnerability Type:** ${analysis.vulnerabilityType || "Unknown"}
-**Severity:** ${analysis.severity || "Unknown"}
+**Vulnerability Type:** ${safeVulnType}
+**Severity:** ${safeSeverity}
 
 ### Description
-${analysis.description || "No description available."}
+${safeDescription}
 
 ### Affected Code
-${analysis.affectedCode ? `\`\`\`\n${analysis.affectedCode}\n\`\`\`` : "Not specified"}
+${safeAffectedCode ? `\`\`\`\n${safeAffectedCode}\n\`\`\`` : "Not specified"}
 
 ### Proof of Concept
-${analysis.proofOfConcept ? `\`\`\`\n${analysis.proofOfConcept}\n\`\`\`` : "Not specified"}
+${safePoC ? `\`\`\`\n${safePoC}\n\`\`\`` : "Not specified"}
 
 ---
 *This issue was automatically created by [Vulnerability Spoiler Alert](https://github.com/spaceraccoon/vulnerability-spoiler-alert-action).*
@@ -42079,7 +42090,7 @@ ${analysis.proofOfConcept ? `\`\`\`\n${analysis.proofOfConcept}\n\`\`\`` : "Not 
         const { data: issue } = await octokit.issues.create({
             owner: issueRepo.owner,
             repo: issueRepo.repo,
-            title: `[Vulnerability] ${repoFullName}: ${analysis.vulnerabilityType || "Security Patch Detected"}`,
+            title: `[Vulnerability] ${repoFullName}: ${safeVulnType}`,
             body,
             labels: ["vulnerability", `severity:${severityLabel}`],
         });
@@ -42094,6 +42105,17 @@ function truncateDiff(diff, maxLength) {
     if (diff.length <= maxLength)
         return diff;
     return diff.substring(0, maxLength) + "\n\n... [diff truncated]";
+}
+function escapeCodeFence(text) {
+    return text.replace(/`{3,}/g, (match) => "`\u200B".repeat(match.length));
+}
+function escapeMarkdown(text) {
+    return text
+        .replace(/\\/g, "\\\\")
+        .replace(/\[/g, "\\[")
+        .replace(/\]/g, "\\]")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 }
 
 ;// CONCATENATED MODULE: ./node_modules/@anthropic-ai/sdk/version.mjs
@@ -46275,12 +46297,15 @@ async function analyzeCommit(commit) {
 ${pr.body ? `**Description:**\n${pr.body.substring(0, 1000)}${pr.body.length > 1000 ? "..." : ""}` : ""}
 `;
     }
-    const prompt = ANALYSIS_PROMPT.replace("{sha}", commit.sha)
-        .replace("{author}", commit.author)
-        .replace("{date}", commit.date)
-        .replace("{message}", commit.message)
-        .replace("{prSection}", prSection)
-        .replace("{diff}", commit.diff);
+    const replacements = {
+        "{sha}": commit.sha,
+        "{author}": commit.author,
+        "{date}": commit.date,
+        "{message}": commit.message,
+        "{prSection}": prSection,
+        "{diff}": commit.diff,
+    };
+    const prompt = ANALYSIS_PROMPT.replace(/\{sha\}|\{author\}|\{date\}|\{message\}|\{prSection\}|\{diff\}/g, (match) => replacements[match] ?? match);
     const response = await client.messages.create({
         model: modelId,
         max_tokens: 1024,
@@ -46315,14 +46340,44 @@ ${pr.body ? `**Description:**\n${pr.body.substring(0, 1000)}${pr.body.length > 1
 
 
 
+
+function sanitizeStatePath(input) {
+    if (!input || input.includes("\0")) {
+        throw new Error("Invalid state-file path");
+    }
+    const cwd = (0,external_fs_.realpathSync)(process.cwd());
+    const resolved = (0,external_path_.resolve)(cwd, input);
+    const normalized = (0,external_path_.normalize)(resolved);
+    if (!normalized.startsWith(cwd + external_path_.sep)) {
+        throw new Error(`state-file path must be within the working directory. Got: ${input}`);
+    }
+    if (!(0,external_path_.basename)(normalized)) {
+        throw new Error(`state-file path must point to a file, not a directory. Got: ${input}`);
+    }
+    return normalized;
+}
 function getInputs() {
     const reposInput = core.getInput("repositories", { required: true });
     let repositories;
     try {
-        repositories = JSON.parse(reposInput);
+        const parsed = JSON.parse(reposInput);
+        if (!Array.isArray(parsed)) {
+            throw new Error("Expected a JSON array");
+        }
+        for (const item of parsed) {
+            if (typeof item !== "object" ||
+                item === null ||
+                typeof item.owner !== "string" ||
+                typeof item.repo !== "string" ||
+                !item.owner ||
+                !item.repo) {
+                throw new Error(`Each entry must be an object with non-empty "owner" and "repo" string fields`);
+            }
+        }
+        repositories = parsed;
     }
-    catch {
-        throw new Error(`Invalid repositories input. Expected JSON array, got: ${reposInput}`);
+    catch (e) {
+        throw new Error(`Invalid repositories input: ${e instanceof Error ? e.message : e}`);
     }
     const issueRepoInput = core.getInput("issue-repo");
     let issueRepo;
@@ -46343,7 +46398,7 @@ function getInputs() {
         anthropicApiKey: core.getInput("anthropic-api-key", { required: true }),
         githubToken: core.getInput("github-token", { required: true }),
         repositories,
-        stateFile: core.getInput("state-file") || ".vulnerability-spoiler-state.json",
+        stateFile: sanitizeStatePath(core.getInput("state-file") || ".vulnerability-spoiler-state.json"),
         createIssues: core.getInput("create-issues") !== "false",
         issueRepo,
         model: core.getInput("model") || "claude-sonnet-4-20250514",

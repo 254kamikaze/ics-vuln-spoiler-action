@@ -1,6 +1,7 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, realpathSync } from "fs";
+import { resolve, normalize, sep, basename } from "path";
 import type {
   ActionInputs,
   RepoConfig,
@@ -16,15 +17,60 @@ import {
 } from "./github.js";
 import { initAnalyzer, analyzeCommit } from "./analyzer.js";
 
+function sanitizeStatePath(input: string): string {
+  if (!input || input.includes("\0")) {
+    throw new Error("Invalid state-file path");
+  }
+
+  const cwd = realpathSync(process.cwd());
+  const resolved = resolve(cwd, input);
+  const normalized = normalize(resolved);
+
+  if (!normalized.startsWith(cwd + sep)) {
+    throw new Error(
+      `state-file path must be within the working directory. Got: ${input}`
+    );
+  }
+
+  if (!basename(normalized)) {
+    throw new Error(
+      `state-file path must point to a file, not a directory. Got: ${input}`
+    );
+  }
+
+  return normalized;
+}
+
 function getInputs(): ActionInputs {
   const reposInput = core.getInput("repositories", { required: true });
   let repositories: RepoConfig[];
 
   try {
-    repositories = JSON.parse(reposInput);
-  } catch {
+    const parsed = JSON.parse(reposInput);
+
+    if (!Array.isArray(parsed)) {
+      throw new Error("Expected a JSON array");
+    }
+
+    for (const item of parsed) {
+      if (
+        typeof item !== "object" ||
+        item === null ||
+        typeof item.owner !== "string" ||
+        typeof item.repo !== "string" ||
+        !item.owner ||
+        !item.repo
+      ) {
+        throw new Error(
+          `Each entry must be an object with non-empty "owner" and "repo" string fields`
+        );
+      }
+    }
+
+    repositories = parsed as RepoConfig[];
+  } catch (e) {
     throw new Error(
-      `Invalid repositories input. Expected JSON array, got: ${reposInput}`
+      `Invalid repositories input: ${e instanceof Error ? e.message : e}`
     );
   }
 
@@ -50,7 +96,7 @@ function getInputs(): ActionInputs {
     anthropicApiKey: core.getInput("anthropic-api-key", { required: true }),
     githubToken: core.getInput("github-token", { required: true }),
     repositories,
-    stateFile: core.getInput("state-file") || ".vulnerability-spoiler-state.json",
+    stateFile: sanitizeStatePath(core.getInput("state-file") || ".vulnerability-spoiler-state.json"),
     createIssues: core.getInput("create-issues") !== "false",
     issueRepo,
     model: core.getInput("model") || "claude-sonnet-4-20250514",

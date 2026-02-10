@@ -81,12 +81,19 @@ ${pr.body ? `**Description:**\n${pr.body.substring(0, 1000)}${pr.body.length > 1
 `;
   }
 
-  const prompt = ANALYSIS_PROMPT.replace("{sha}", commit.sha)
-    .replace("{author}", commit.author)
-    .replace("{date}", commit.date)
-    .replace("{message}", commit.message)
-    .replace("{prSection}", prSection)
-    .replace("{diff}", commit.diff);
+  const replacements: Record<string, string> = {
+    "{sha}": commit.sha,
+    "{author}": commit.author,
+    "{date}": commit.date,
+    "{message}": commit.message,
+    "{prSection}": prSection,
+    "{diff}": commit.diff,
+  };
+
+  const prompt = ANALYSIS_PROMPT.replace(
+    /\{sha\}|\{author\}|\{date\}|\{message\}|\{prSection\}|\{diff\}/g,
+    (match) => replacements[match] ?? match
+  );
 
   const response = await client.messages.create({
     model: modelId,
