@@ -129,6 +129,10 @@ export async function createVulnerabilityIssue(
   const safeDescription = escapeMarkdown(analysis.description || "No description available.");
   const safeAffectedCode = analysis.affectedCode ? escapeCodeFence(analysis.affectedCode) : null;
   const safePoC = analysis.proofOfConcept ? escapeCodeFence(analysis.proofOfConcept) : null;
+  const safeOtCategory = escapeMarkdown(analysis.otCategory || "Unknown");
+  const safeProtocol = escapeMarkdown(analysis.affectedProtocol || "Unknown");
+  const safePurdueLayer = escapeMarkdown(analysis.purdueLayer || "Unknown");
+  const safeSafetyImpact = analysis.safetyImpact ? escapeMarkdown(analysis.safetyImpact) : null;
 
   const prSection = commit.pullRequest
     ? `
@@ -139,9 +143,13 @@ ${commit.pullRequest.body ? `\n**Description:**\n${escapeMarkdown(commit.pullReq
 `
     : "";
 
-  const body = `## Potential Security Vulnerability Detected
+  const safetyBanner = safeSafetyImpact
+    ? `> **SAFETY IMPACT:** ${safeSafetyImpact}\n\n`
+    : "";
 
-**Repository:** [${repoFullName}](https://github.com/${repoFullName})
+  const body = `## Potential ICS/OT Security Vulnerability Detected
+
+${safetyBanner}**Repository:** [${repoFullName}](https://github.com/${repoFullName})
 **Commit:** [${commit.sha.substring(0, 7)}](${commit.url})
 **Author:** ${safeAuthor}
 **Date:** ${commit.date}
@@ -156,6 +164,13 @@ ${prSection}
 **Vulnerability Type:** ${safeVulnType}
 **Severity:** ${safeSeverity}
 
+### OT Classification
+
+**Affected Protocol:** ${safeProtocol}
+**OT Category:** ${safeOtCategory}
+**Purdue Layer:** ${safePurdueLayer}
+${safeSafetyImpact ? `**Safety Impact:** ${safeSafetyImpact}` : ""}
+
 ### Description
 ${safeDescription}
 
@@ -166,17 +181,40 @@ ${safeAffectedCode ? `\`\`\`\n${safeAffectedCode}\n\`\`\`` : "Not specified"}
 ${safePoC ? `\`\`\`\n${safePoC}\n\`\`\`` : "Not specified"}
 
 ---
-*This issue was automatically created by [Vulnerability Spoiler Alert](https://github.com/spaceraccoon/vulnerability-spoiler-alert-action).*
+*This issue was automatically created by [ICS Vulnerability Spoiler Alert](https://github.com/spaceraccoon/vulnerability-spoiler-alert-action).*
 *Detected at: ${new Date().toISOString()}*
 `;
+
+  // Build label list with OT-specific labels
+  const labels: string[] = ["vulnerability", `severity:${severityLabel}`];
+
+  if (analysis.otCategory) {
+    labels.push(`ot:${analysis.otCategory}`);
+  }
+
+  if (analysis.affectedProtocol) {
+    const protocolSlug = analysis.affectedProtocol
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    labels.push(`protocol:${protocolSlug}`);
+  }
+
+  if (analysis.purdueLayer) {
+    labels.push(`purdue:${analysis.purdueLayer}`);
+  }
+
+  if (analysis.safetyImpact) {
+    labels.push("safety-impact");
+  }
 
   try {
     const { data: issue } = await octokit.issues.create({
       owner: issueRepo.owner,
       repo: issueRepo.repo,
-      title: `[Vulnerability] ${repoFullName}: ${safeVulnType}`,
+      title: `[ICS Vulnerability] ${repoFullName}: ${safeVulnType}`,
       body,
-      labels: ["vulnerability", `severity:${severityLabel}`],
+      labels,
     });
 
     return issue.html_url;

@@ -1,5 +1,5 @@
-name: 'Vulnerability Spoiler Alert'
-description: 'Monitor repositories for security vulnerability patches using Claude AI'
+name: 'ICS Vulnerability Spoiler Alert'
+description: 'Monitor OT/ICS repositories for security vulnerability patches using Claude AI with industrial protocol awareness'
 author: 'spaceraccoon'
 
 branding:

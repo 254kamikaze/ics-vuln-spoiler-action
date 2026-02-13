@@ -1,5 +1,5 @@
 {
-  "name": "vulnerability-spoiler-alert-action",
+  "name": "ics-vuln-spoiler-action",
   "version": "1.0.0",
   "description": "GitHub Action to monitor repositories for security vulnerability patches using Claude AI",
   "main": "dist/index.js",

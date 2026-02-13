@@ -37,6 +37,21 @@ export interface CommitInfo {
   pullRequest: PullRequestInfo | null;
 }
 
+export type OtCategory =
+  | "protocol-parsing"
+  | "plc-logic-injection"
+  | "auth-bypass"
+  | "command-injection"
+  | "insecure-defaults"
+  | "input-validation"
+  | "sis-bypass"
+  | "info-disclosure"
+  | "dos-control-system"
+  | "insecure-update"
+  | null;
+
+export type PurdueLayer = "L0" | "L1" | "L2" | "L3" | "L4" | "L5" | null;
+
 export interface VulnerabilityAnalysis {
   isVulnerabilityPatch: boolean;
   vulnerabilityType: string | null;
@@ -44,6 +59,10 @@ export interface VulnerabilityAnalysis {
   description: string | null;
   affectedCode: string | null;
   proofOfConcept: string | null;
+  otCategory: OtCategory;
+  affectedProtocol: string | null;
+  purdueLayer: PurdueLayer;
+  safetyImpact: string | null;
 }
 
 export interface DetectedVulnerability {
